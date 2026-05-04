@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tiktokgen.nightly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/dgnaro/tiktok_generator-video/scheduler/run-nightly.sh</string>
+    </array>
+
+    <!-- Tous les jours à 22:00 (heure locale du Mac, devrait être Europe/Paris) -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>22</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Si le Mac dormait à 22h, exécuter au réveil -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/dgnaro/Library/Logs/tiktok-gen/launchd.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/dgnaro/Library/Logs/tiktok-gen/launchd.stderr.log</string>
+
+    <!-- Working dir -->
+    <key>WorkingDirectory</key>
+    <string>/Users/dgnaro/tiktok_generator-video</string>
+
+    <!-- Limit memory pressure -->
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <!-- Don't restart on completion -->
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>

@@ -1,0 +1,50 @@
+language: fr
+topic: "motivation / mindset"
+description: >
+  Motivation directe, sans bullshit. Pas de "tu peux tout faire". On parle d'effort,
+  de discipline, d'inconfort, de patience. Style coach exigeant qui croit en toi.
+  Pas de citations creuses recyclées.
+
+mode: narration
+
+duration:
+  min_sec: 62
+  target_sec: 65
+  max_sec: 72
+
+voice:
+  voice_id: ErXwobaYiN019PkySvjV  # Antoni — masculin, chaleureux, énergique
+  model_id: eleven_multilingual_v2
+  stability: 0.45        # 0.32 donnait des variations de rythme — remonté pour régularité
+  similarity_boost: 0.78
+  style: 0.50            # 0.65 trop expressif — équilibré
+  use_speaker_boost: true
+
+theme:
+  primary_color: "#FF6B35"           # orange feu
+  secondary_color: "#F7C59F"         # crème énergie
+  background_color: "#0A0A0A"
+  text_color: "#FFFFFF"
+  subtitle_highlight: "#FFD60A"
+  font_family: "Inter, system-ui, sans-serif"
+  hook_font_size: 134
+  subtitle_font_size: 92
+  cta_font_size: 70
+
+stock:
+  primary: pexels
+  per_keyword: 2
+  min_clip_duration: 3.0
+  max_clip_duration: 8.0
+  orientation: portrait
+
+music:
+  enabled: false
+  mood: energetic
+  volume_db: -16
+
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  codec: h264

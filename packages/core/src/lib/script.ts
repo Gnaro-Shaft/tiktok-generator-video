@@ -1,0 +1,192 @@
+import Anthropic from '@anthropic-ai/sdk';
+import fs from 'node:fs';
+import path from 'node:path';
+import { env, loadPrompt, NICHES_DIR } from './config.js';
+import type { GeneratedScript, NicheConfig } from '../types/index.js';
+
+interface GenerateOptions {
+  niche: NicheConfig;
+  topicHint?: string;
+  forceLonger?: boolean;
+  forceShorter?: boolean;
+}
+
+const HISTORY_FILE = (nicheId: string) =>
+  path.join(NICHES_DIR, nicheId, 'state', 'topic-history.jsonl');
+
+function loadRecentTopics(nicheId: string, limit = 30): string[] {
+  const file = HISTORY_FILE(nicheId);
+  if (!fs.existsSync(file)) return [];
+  const lines = fs.readFileSync(file, 'utf-8').trim().split('\n').filter(Boolean);
+  return lines
+    .slice(-limit)
+    .map((l) => {
+      try {
+        return JSON.parse(l).topic as string;
+      } catch {
+        return '';
+      }
+    })
+    .filter(Boolean);
+}
+
+export function saveTopicToHistory(nicheId: string, topic: string): void {
+  const file = HISTORY_FILE(nicheId);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.appendFileSync(
+    file,
+    JSON.stringify({ ts: new Date().toISOString(), topic }) + '\n'
+  );
+}
+
+export async function generateScript(opts: GenerateOptions): Promise<GeneratedScript> {
+  const { niche, topicHint, forceLonger, forceShorter } = opts;
+  const client = new Anthropic({ apiKey: env().ANTHROPIC_API_KEY });
+
+  const systemPrompt = loadPrompt(niche.id, 'system');
+  const recent = loadRecentTopics(niche.id);
+  const avoid =
+    recent.length > 0
+      ? `\n\nÉvite absolument ces sujets déjà traités récemment : ${recent.join(', ')}.`
+      : '';
+
+  const userPrompt = niche.mode === 'slides'
+    ? buildSlidesPrompt(niche, topicHint, avoid, forceLonger)
+    : buildNarrationPrompt(niche, topicHint, avoid, forceLonger, forceShorter);
+
+  const resp = await client.messages.create({
+    model: 'claude-sonnet-4-5',
+    max_tokens: 2500,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+
+  const text = resp.content
+    .filter((b) => b.type === 'text')
+    .map((b) => (b as { text: string }).text)
+    .join('');
+
+  const jsonStart = text.indexOf('{');
+  const jsonEnd = text.lastIndexOf('}');
+  if (jsonStart < 0 || jsonEnd < 0) {
+    throw new Error(`No JSON in script response: ${text.slice(0, 200)}`);
+  }
+  const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+
+  if (niche.mode === 'slides') {
+    return {
+      mode: 'slides',
+      topic: parsed.topic,
+      hook: parsed.hook,
+      scenes: parsed.scenes,
+      cta: parsed.cta,
+      caption: parsed.caption,
+      hashtags: parsed.hashtags,
+      keywords: parsed.keywords,
+    };
+  }
+
+  const full_text = `${parsed.script.hook}. ${parsed.script.body} ${parsed.script.cta}`.trim();
+  return {
+    mode: 'narration',
+    topic: parsed.topic,
+    script: parsed.script,
+    full_text,
+    caption: parsed.caption,
+    hashtags: parsed.hashtags,
+    keywords: parsed.keywords,
+  };
+}
+
+const KEYWORDS_SAFE_RULE = `Les keywords servent à trouver du stock vidéo TikTok-safe (compte qui peut être vu par tous). PROSCRIS tout ce qui peut renvoyer du contenu suggestif, sexualisé, body-shaming ou ambigü : pas de "lingerie/underwear/bra/bikini/swimsuit", pas de "bedroom/shower/bath/massage/spa", pas de "sexy/seductive", pas de "cleavage/thigh", pas de "kissing/intimate/dance club/pole dance/twerk". Préfère des plans abstraits, professionnels, neutres : workspace, laptop, calendar, city skyline, ai dashboard, growth chart, etc.`;
+
+function buildNarrationPrompt(
+  niche: NicheConfig,
+  topicHint: string | undefined,
+  avoid: string,
+  forceLonger: boolean | undefined,
+  forceShorter: boolean | undefined
+): string {
+  // ElevenLabs FR avec pauses naturelles ≈ 2.3 mots/s effectifs (post compression silence).
+  const wordsTarget = Math.round(niche.duration.target_sec * 2.3);
+  const wordsMin = Math.round(niche.duration.min_sec * 2.3);
+  const wordsMax = Math.round(niche.duration.max_sec * 2.3);
+  return [
+    `Niche: ${niche.topic}`,
+    `Description: ${niche.description}`,
+    `Langue: ${niche.language}`,
+    `Durée audio cible: ${niche.duration.target_sec}s (min ${niche.duration.min_sec}s, max ${niche.duration.max_sec}s)`,
+    `Calibrage du nombre de mots TOTAL (hook + body + cta) — la voix FR lit ~2.6 mots/seconde :`,
+    `  • cible : ${wordsTarget} mots`,
+    `  • minimum : ${wordsMin} mots (sinon vidéo trop courte, perd la monétisation TikTok)`,
+    `  • maximum : ${wordsMax} mots (au-delà, ça déborde et casse le rythme)`,
+    `Compte tes mots avant de rendre la réponse. Ajuste si nécessaire.`,
+    topicHint ? `Sujet imposé: ${topicHint}` : 'Choisis un sujet pertinent, original, actionnable.',
+    forceLonger ? `IMPORTANT: la précédente version faisait moins de ${niche.duration.min_sec}s en synthèse vocale. AJOUTE 1-2 exemples chiffrés ou une étape détaillée pour rallonger raisonnablement. RESTE sous ${wordsMax} mots total.` : '',
+    forceShorter ? `IMPORTANT: la précédente version dépassait ${niche.duration.max_sec}s. RACCOURCIS le body — supprime un exemple ou une étape — pour rester sous ${wordsMax} mots total. Reste cependant au-dessus de ${wordsMin} mots.` : '',
+    avoid,
+    '',
+    KEYWORDS_SAFE_RULE,
+    '',
+    'Réponds UNIQUEMENT avec un objet JSON valide, aucun markdown, aucun commentaire, structure exacte:',
+    '{',
+    '  "topic": "string court décrivant le sujet",',
+    '  "script": {',
+    '    "hook": "phrase d\'accroche 3-8 mots, percutante",',
+    '    "body": "corps du script narré, ton direct",',
+    '    "cta": "call-to-action 5-12 mots"',
+    '  },',
+    '  "caption": "description courte pour TikTok, max 150 caractères, accrocheuse",',
+    '  "hashtags": ["5 hashtags pertinents sans #"],',
+    '  "keywords": ["6-10 mots-clés visuels en anglais TikTok-safe pour stock footage (voir règles ci-dessus)"]',
+    '}',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function buildSlidesPrompt(
+  niche: NicheConfig,
+  topicHint: string | undefined,
+  avoid: string,
+  forceLonger: boolean | undefined
+): string {
+  const target = niche.duration.target_sec;
+  return [
+    `Niche: ${niche.topic}`,
+    `Description: ${niche.description}`,
+    `Langue: ${niche.language}`,
+    `Format: SLIDES (vidéo SANS voix, texte affiché à l'écran sur clips de fond).`,
+    `Durée cible totale: ${target}s (min ${niche.duration.min_sec}s, max ${niche.duration.max_sec}s).`,
+    `Le viewer LIT le texte. Phrases courtes, percutantes, lisibles en moins de 4 secondes par scène.`,
+    topicHint ? `Sujet imposé: ${topicHint}` : 'Choisis un sujet pertinent, original, actionnable.',
+    forceLonger ? 'IMPORTANT: ajoute des scènes pour atteindre la durée cible.' : '',
+    avoid,
+    '',
+    KEYWORDS_SAFE_RULE,
+    '',
+    `Construis 7-10 scènes qui s'enchaînent. Chaque scène = UNE phrase courte (max 14 mots) qui tient à l'écran 5-9 secondes.`,
+    `La somme des durées DOIT être entre ${niche.duration.min_sec} et ${niche.duration.max_sec} secondes.`,
+    `La 1ère scène est le HOOK. La dernière scène est le CTA. Les scènes du milieu développent le message.`,
+    '',
+    `Tu peux mettre en valeur UN mot par scène via le champ "emphasis" (chiffre clé, mot puissant). Optionnel.`,
+    '',
+    'Réponds UNIQUEMENT avec un objet JSON valide, aucun markdown, structure exacte:',
+    '{',
+    '  "topic": "string court décrivant le sujet",',
+    '  "hook": "1ère scène — phrase d\'accroche 4-10 mots",',
+    '  "scenes": [',
+    '    {"text": "phrase 1 (= hook)", "duration_sec": 4.5, "emphasis": "mot clé optionnel"},',
+    '    {"text": "phrase 2", "duration_sec": 6.0},',
+    '    {"text": "phrase 3", "duration_sec": 7.0, "emphasis": "847"},',
+    '    "... 7 à 10 scènes au total ..."',
+    '  ],',
+    '  "cta": "phrase de la dernière scène (mêmes contenu que scenes[last].text)",',
+    '  "caption": "description courte TikTok, max 150 caractères, accrocheuse",',
+    '  "hashtags": ["5 hashtags sans #"],',
+    '  "keywords": ["6-10 mots-clés visuels en anglais pour stock footage"]',
+    '}',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}

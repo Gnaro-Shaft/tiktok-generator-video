@@ -1,0 +1,50 @@
+language: fr
+topic: "finance personnelle / éducation financière"
+description: >
+  Finance personnelle vulgarisée, légalement neutre.
+  Tu expliques des concepts (budget, épargne, investissement passif, fiscalité de base FR).
+  Tu ne donnes JAMAIS de conseil financier nominatif. Pas de promesse de rendement.
+
+mode: narration
+
+duration:
+  min_sec: 62
+  target_sec: 68
+  max_sec: 75
+
+voice:
+  voice_id: pqHfZKP75CvOlQylNhV4  # Bill — masculin, grave, sérieux
+  model_id: eleven_multilingual_v2
+  stability: 0.50
+  similarity_boost: 0.75
+  style: 0.40
+  use_speaker_boost: true
+
+theme:
+  primary_color: "#F59E0B"           # doré argent
+  secondary_color: "#FBBF24"         # jaune doré
+  background_color: "#0F172A"        # bleu nuit sérieux
+  text_color: "#F1F5F9"
+  subtitle_highlight: "#FFD60A"
+  font_family: "Inter, system-ui, sans-serif"
+  hook_font_size: 122
+  subtitle_font_size: 84
+  cta_font_size: 66
+
+stock:
+  primary: pexels
+  per_keyword: 2
+  min_clip_duration: 3.0
+  max_clip_duration: 8.0
+  orientation: portrait
+
+music:
+  enabled: false
+  mood: corporate
+  volume_db: -20
+
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  codec: h264

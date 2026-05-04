@@ -1,0 +1,49 @@
+language: fr
+topic: "business / IA"
+description: >
+  Astuces et outils IA/automatisation pour entrepreneurs francophones.
+  Ton direct, concret, orienté action. Pas de blabla théorique.
+
+mode: narration
+
+duration:
+  min_sec: 62        # plancher dur — monétisation TikTok exige 60s
+  target_sec: 65
+  max_sec: 75
+
+voice:
+  voice_id: XrExE9yKIg1WjnnlVkGX  # Matilda
+  model_id: eleven_multilingual_v2
+  stability: 0.38           # baissé : plus de variation, moins monotone
+  similarity_boost: 0.72
+  style: 0.55               # remonté : plus d'expressivité
+  use_speaker_boost: true
+
+theme:
+  primary_color: "#FF0050"
+  secondary_color: "#00F2EA"
+  background_color: "#000000"
+  text_color: "#FFFFFF"
+  subtitle_highlight: "#FFD600"
+  font_family: "Inter, system-ui, sans-serif"
+  hook_font_size: 130
+  subtitle_font_size: 88
+  cta_font_size: 68
+
+stock:
+  primary: pexels
+  per_keyword: 2
+  min_clip_duration: 3.0
+  max_clip_duration: 8.0
+  orientation: portrait
+
+music:
+  enabled: false       # active une fois les mp3 déposés dans assets/music/corporate/
+  mood: corporate
+  volume_db: -18
+
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  codec: h264

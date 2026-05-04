@@ -1,0 +1,16 @@
+{
+  "name": "tiktok-generator-video",
+  "version": "0.1.0",
+  "description": "Unified TikTok video generator — 6 niches, narration + voice, Remotion + ElevenLabs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "generate": "pnpm --filter @tt/cli start",
+    "schedule": "pnpm --filter @tt/scheduler start"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

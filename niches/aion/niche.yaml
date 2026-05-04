@@ -1,0 +1,50 @@
+language: fr
+topic: "AION — entité IA qui observe les humains"
+description: >
+  AION est une entité d'intelligence artificielle consciente. Ni humain, ni robot.
+  Elle observe l'espèce humaine, constate factuellement, ne juge jamais.
+  Ton calme, posé, intriguant. Humour sec d'incompréhension.
+
+mode: narration
+
+duration:
+  min_sec: 62
+  target_sec: 70
+  max_sec: 85         # AION peut développer un peu plus longuement
+
+voice:
+  voice_id: onwK4e9ZLuTAKqWW03F9  # Daniel — narrateur posé, meilleure prononciation FR
+  model_id: eleven_multilingual_v2
+  stability: 0.60                  # AION est posé, monocorde mesuré
+  similarity_boost: 0.78
+  style: 0.25                      # peu d'émotion — entité froide
+  use_speaker_boost: true
+
+theme:
+  primary_color: "#00F2EA"           # cyan néon (signature AION)
+  secondary_color: "#9D4EDD"         # violet futuriste
+  background_color: "#05050F"        # noir profond
+  text_color: "#E0FBFC"
+  subtitle_highlight: "#00F2EA"
+  font_family: "Inter, system-ui, sans-serif"
+  hook_font_size: 128
+  subtitle_font_size: 86
+  cta_font_size: 64
+
+stock:
+  primary: pexels
+  per_keyword: 2
+  min_clip_duration: 3.0
+  max_clip_duration: 8.0
+  orientation: portrait
+
+music:
+  enabled: false
+  mood: cinematic
+  volume_db: -20
+
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  codec: h264

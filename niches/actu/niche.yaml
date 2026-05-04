@@ -1,0 +1,50 @@
+language: fr
+topic: "actu / news décryptée"
+description: >
+  Décryptage d'actualités économiques, sociétales, tech.
+  Format journalistique : fait + chiffre + angle. Pas de complotisme, pas de polémique.
+  Sources fiables uniquement (presse établie, études vérifiées).
+
+mode: narration
+
+duration:
+  min_sec: 62
+  target_sec: 67
+  max_sec: 75
+
+voice:
+  voice_id: pNInz6obpgDQGcFmaJgB  # Adam — masculin, posé, journalistique
+  model_id: eleven_multilingual_v2
+  stability: 0.55        # remonté pour éviter pauses anormales sur phrases longues
+  similarity_boost: 0.78
+  style: 0.35
+  use_speaker_boost: true
+
+theme:
+  primary_color: "#E63946"           # rouge presse
+  secondary_color: "#F1FAEE"         # crème journal
+  background_color: "#1D1D1D"
+  text_color: "#FFFFFF"
+  subtitle_highlight: "#FFD60A"      # jaune mise en avant
+  font_family: "Inter, system-ui, sans-serif"
+  hook_font_size: 124
+  subtitle_font_size: 86
+  cta_font_size: 66
+
+stock:
+  primary: pexels
+  per_keyword: 2
+  min_clip_duration: 3.0
+  max_clip_duration: 8.0
+  orientation: portrait
+
+music:
+  enabled: false
+  mood: cinematic
+  volume_db: -20
+
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  codec: h264

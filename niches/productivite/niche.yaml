@@ -1,0 +1,50 @@
+language: fr
+topic: "productivité / efficacité"
+description: >
+  Méthodes et habitudes de productivité testées et concrètes.
+  Pas de "10 hacks pour doubler ta productivité". Une méthode, un cas d'usage, un résultat.
+  Style coach efficace, pédagogue, sans gourou.
+
+mode: narration
+
+duration:
+  min_sec: 62
+  target_sec: 66
+  max_sec: 73
+
+voice:
+  voice_id: XB0fDUnXU5powFXDhCwa  # Charlotte — féminine, claire, pédago
+  model_id: eleven_multilingual_v2
+  stability: 0.42
+  similarity_boost: 0.75
+  style: 0.45
+  use_speaker_boost: true
+
+theme:
+  primary_color: "#06D6A0"           # vert turquoise (croissance)
+  secondary_color: "#118AB2"         # bleu confiance
+  background_color: "#0A1A1F"
+  text_color: "#FFFFFF"
+  subtitle_highlight: "#FFD60A"
+  font_family: "Inter, system-ui, sans-serif"
+  hook_font_size: 124
+  subtitle_font_size: 86
+  cta_font_size: 66
+
+stock:
+  primary: pexels
+  per_keyword: 2
+  min_clip_duration: 3.0
+  max_clip_duration: 8.0
+  orientation: portrait
+
+music:
+  enabled: false
+  mood: calm
+  volume_db: -20
+
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  codec: h264

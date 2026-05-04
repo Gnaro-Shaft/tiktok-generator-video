@@ -1,0 +1,40 @@
+# Dépendances
+node_modules/
+
+# Build outputs
+dist/
+.cache/
+
+# Système macOS
+.DS_Store
+
+# Secrets — ne JAMAIS pousser
+.env
+.env.*
+!.env.example
+
+# Outputs générés (vidéos + métadonnées)
+output/
+
+# Médias locaux (libres de droits déposés par l'utilisateur)
+assets/music/**/*.mp3
+assets/music/**/*.wav
+assets/music/**/*.m4a
+assets/sfx/**/*.mp3
+assets/sfx/**/*.wav
+
+# State runtime (history JSONL, topics)
+state/
+**/state/
+
+# Stages temporaires Remotion
+packages/remotion/public/run-*
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+

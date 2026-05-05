@@ -8,9 +8,9 @@ description: >
 mode: narration
 
 duration:
-  min_sec: 62
-  target_sec: 66
-  max_sec: 73
+  min_sec: 65        # Charlotte parle vite, on demande plus de mots pour atteindre 60s+
+  target_sec: 72
+  max_sec: 80
 
 voice:
   voice_id: XB0fDUnXU5powFXDhCwa  # Charlotte — féminine, claire, pédago

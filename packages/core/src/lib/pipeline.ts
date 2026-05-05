@@ -48,30 +48,41 @@ export async function runPipeline(opts: RunOptions): Promise<RunResult> {
     console.log(`        Sujet: ${generated.topic}`);
 
     let result: RunResult;
+    let attempts = 1;
+    let finalDuration = 0;
     if (opts.niche.mode === 'slides') {
       result = await runSlidesPipeline(opts, generated, dayDir, tempDir, date);
     } else {
-      // Narration: retry once if the voice is outside [min_sec, max_sec].
+      // Narration: up to 2 retries to get the voice within [min_sec, max_sec].
       let attempt = await runNarrationPipeline(opts, generated, dayDir, tempDir, date);
       const { min_sec, max_sec } = opts.niche.duration;
-      if (attempt.durationSec < min_sec) {
-        console.log(`  ⚠ Voix ${attempt.durationSec.toFixed(1)}s < min ${min_sec}s — retry forceLonger`);
+      const MAX_RETRIES = 2;
+      for (let i = 0; i < MAX_RETRIES; i++) {
+        if (attempt.durationSec >= min_sec && attempt.durationSec <= max_sec) break;
+        const tooShort = attempt.durationSec < min_sec;
+        console.log(
+          `  ⚠ Voix ${attempt.durationSec.toFixed(1)}s ${tooShort ? '< min' : '> max'} ${tooShort ? min_sec : max_sec}s ` +
+            `— retry ${i + 1}/${MAX_RETRIES} ${tooShort ? 'forceLonger' : 'forceShorter'}`
+        );
         generated = await generateScript({
           niche: opts.niche,
           topicHint: opts.topicHint ?? generated.topic,
-          forceLonger: true,
+          forceLonger: tooShort,
+          forceShorter: !tooShort,
         });
         attempt = await runNarrationPipeline(opts, generated, dayDir, tempDir, date);
-      } else if (attempt.durationSec > max_sec) {
-        console.log(`  ⚠ Voix ${attempt.durationSec.toFixed(1)}s > max ${max_sec}s — retry forceShorter`);
-        generated = await generateScript({
-          niche: opts.niche,
-          topicHint: opts.topicHint ?? generated.topic,
-          forceShorter: true,
-        });
-        attempt = await runNarrationPipeline(opts, generated, dayDir, tempDir, date);
+        attempts++;
       }
       result = attempt.result;
+      finalDuration = attempt.durationSec;
+      const inBounds = attempt.durationSec >= min_sec && attempt.durationSec <= max_sec;
+      if (!inBounds) {
+        console.log(
+          `  ⚠ Voix finale ${attempt.durationSec.toFixed(1)}s reste hors [${min_sec},${max_sec}] après ${attempts} tentatives — gardée tel quel`
+        );
+      } else if (attempts > 1) {
+        console.log(`  ✓ Durée corrigée en ${attempts} tentatives → ${attempt.durationSec.toFixed(1)}s`);
+      }
     }
     saveTopicToHistory(opts.niche.id, generated.topic);
 
@@ -83,7 +94,9 @@ export async function runPipeline(opts: RunOptions): Promise<RunResult> {
       topic: generated.topic,
       outFile: result.videoPath,
       action: 'success',
-    });
+      attempts,
+      duration_sec: finalDuration || undefined,
+    } as never);
 
     return result;
   } catch (err) {

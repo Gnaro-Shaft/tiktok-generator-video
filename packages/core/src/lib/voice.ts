@@ -146,8 +146,27 @@ async function compressLongSilences(
   });
   fs.renameSync(tmpOut, audioPath);
 
-  const lastEndMs = adjusted.length > 0 ? adjusted[adjusted.length - 1].endMs : 0;
-  return { wordTimings: adjusted, durationSec: lastEndMs / 1000 };
+  // Use the ACTUAL audio file duration (not the last word timing) so we don't
+  // truncate the trailing audio when ffmpeg composes the final video.
+  const actualDurationSec = await probeAudioDuration(audioPath);
+  return { wordTimings: adjusted, durationSec: actualDurationSec };
+}
+
+async function probeAudioDuration(audioPath: string): Promise<number> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      'ffprobe',
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', audioPath],
+      { stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+    let stdout = '';
+    child.stdout.on('data', (d) => (stdout += d.toString()));
+    child.on('exit', () => {
+      const dur = Number(stdout.trim());
+      resolve(Number.isFinite(dur) ? dur : 0);
+    });
+    child.on('error', () => resolve(0));
+  });
 }
 
 async function detectSilences(

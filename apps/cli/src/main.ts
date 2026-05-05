@@ -1,6 +1,14 @@
 #!/usr/bin/env -S npx tsx
 import 'dotenv/config';
-import { runPipeline, loadNiche, listNiches, type Slot } from '@tt/core';
+import {
+  runPipeline,
+  loadNiche,
+  listNiches,
+  checkVideo,
+  formatCheckLine,
+  type Slot,
+  type CheckResult,
+} from '@tt/core';
 
 interface Args {
   niche?: string;
@@ -10,6 +18,8 @@ interface Args {
   list?: boolean;
   batch?: boolean;
   concurrency?: number;
+  check?: boolean;
+  date?: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -18,12 +28,15 @@ function parseArgs(argv: string[]): Args {
     const a = argv[i];
     if (a === '--list') out.list = true;
     else if (a === '--batch') out.batch = true;
+    else if (a === '--check') out.check = true;
     else if (a === '--niche') out.niche = argv[++i];
     else if (a.startsWith('--niche=')) out.niche = a.slice(8);
     else if (a === '--slot') out.slot = argv[++i] as Slot;
     else if (a.startsWith('--slot=')) out.slot = a.slice(7) as Slot;
     else if (a === '--topic') out.topic = argv[++i];
     else if (a.startsWith('--topic=')) out.topic = a.slice(8);
+    else if (a === '--date') out.date = argv[++i];
+    else if (a.startsWith('--date=')) out.date = a.slice(7);
     else if (a === '--concurrency') out.concurrency = Number(argv[++i]);
     else if (a.startsWith('--concurrency=')) out.concurrency = Number(a.slice(14));
     else if (a === '--skip-render') out.skipRender = true;
@@ -37,12 +50,13 @@ Usage:
   tt --list
   tt --niche <id> --slot <morning|evening> [--topic "sujet"] [--skip-render]
   tt --batch --slot <morning|evening|all> [--concurrency 3]
+  tt --check [--niche <id>] [--slot <morning|evening|all>] [--date YYYY-MM-DD]
 
 Examples:
   tt --niche business-ia --slot morning
-  tt --batch --slot morning             # 6 niches en parallèle (slot morning)
   tt --batch --slot all                 # 12 vidéos = 6 niches × {morning, evening}
-  tt --batch --slot evening --concurrency 2
+  tt --check                            # vérifie toutes les vidéos d'aujourd'hui
+  tt --check --niche motivation         # vérifie motivation morning + evening
 `);
 }
 
@@ -53,7 +67,72 @@ async function runOne(nicheId: string, slot: Slot, topic?: string, skipRender?: 
   const result = await runPipeline({ niche, slot, topicHint: topic, skipRender });
   const took = ((Date.now() - start) / 1000).toFixed(1);
   console.log(`✅ [${nicheId}] terminé en ${took}s → ${result.videoPath}`);
+
+  // Auto-check post-génération.
+  if (!skipRender) {
+    const check = await checkVideo(niche, slot, todayParis());
+    console.log('   ' + formatCheckLine(check));
+    for (const issue of check.issues) {
+      const icon = issue.severity === 'error' ? '   ❌' : '   ⚠️';
+      console.log(`${icon} ${issue.code}: ${issue.message}`);
+    }
+  }
   return { nicheId, ok: true as const, result };
+}
+
+function todayParis(): string {
+  const fmt = new Intl.DateTimeFormat('fr-FR', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = fmt.formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+async function runCheck(args: Args): Promise<void> {
+  const date = args.date ?? todayParis();
+  const allNiches = listNiches();
+  const niches = args.niche ? [args.niche] : allNiches;
+  const slots: Slot[] =
+    args.slot === 'morning'
+      ? ['morning']
+      : args.slot === 'evening'
+        ? ['evening']
+        : ['morning', 'evening'];
+
+  console.log(`▶ Check qualité — date=${date}, niches=${niches.join(',')}, slots=${slots.join(',')}`);
+  console.log('');
+
+  const results: CheckResult[] = [];
+  for (const nicheId of niches) {
+    let niche;
+    try {
+      niche = loadNiche(nicheId);
+    } catch (err) {
+      console.log(`❌ ${nicheId}: ${err instanceof Error ? err.message : err}`);
+      continue;
+    }
+    for (const slot of slots) {
+      const r = await checkVideo(niche, slot, date);
+      results.push(r);
+      console.log(formatCheckLine(r));
+      for (const issue of r.issues) {
+        const icon = issue.severity === 'error' ? '   ❌' : '   ⚠️';
+        console.log(`${icon} ${issue.code}: ${issue.message}`);
+      }
+    }
+  }
+
+  const errors = results.filter((r) => !r.ok);
+  console.log('');
+  console.log(`═══ ${results.length - errors.length}/${results.length} vidéos OK ═══`);
+  if (errors.length > 0) {
+    console.log(`❌ Vidéos avec erreurs : ${errors.map((r) => `${r.niche}/${r.slot}`).join(', ')}`);
+    process.exitCode = 1;
+  }
 }
 
 async function runOneSafe(nicheId: string, slot: Slot, skipRender?: boolean) {
@@ -107,6 +186,11 @@ async function main(): Promise<void> {
     const niches = listNiches();
     console.log('Niches disponibles:');
     for (const n of niches) console.log(`  - ${n}`);
+    return;
+  }
+
+  if (args.check) {
+    await runCheck(args);
     return;
   }
 

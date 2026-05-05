@@ -8,3 +8,4 @@ export * from './lib/render.js';
 export * from './lib/compose.js';
 export * from './lib/state.js';
 export * from './lib/pipeline.js';
+export * from './lib/check.js';

@@ -63,19 +63,25 @@ export async function synthesizeVoice(
       }).alignment;
       if (!alignment) throw new Error('ElevenLabs response missing alignment');
 
-      let wordTimings = charactersToWords(
+      const wordTimings = charactersToWords(
         alignment.characters,
         alignment.characterStartTimesSeconds,
         alignment.characterEndTimesSeconds
       );
 
-      let durationSec = alignment.characterEndTimesSeconds.at(-1) ?? 0;
+      // Use the actual audio file duration (post-encoding), not the last word
+      // timing — silence terminal compte pour la composition vidéo.
+      const durationSec = await probeAudioDuration(audioPath);
 
-      // Compress silences > 0.8s to 0.35s — lisse le débit perçu comme "ralentissement".
-      const compressed = await compressLongSilences(audioPath, wordTimings, 0.8, 0.35);
-      if (compressed) {
-        wordTimings = compressed.wordTimings;
-        durationSec = compressed.durationSec;
+      // Detect abnormal mid-audio silences (>3s) and warn — but don't post-process
+      // (ffmpeg silenceremove désynchronisait les sous-titres). Si une vidéo en a,
+      // la regénérer manuellement résout le problème (ElevenLabs renvoie souvent
+      // un audio différent au 2e appel).
+      const longSilences = await detectSilences(audioPath, 3.0);
+      if (longSilences.length > 0) {
+        console.log(
+          `        [voice] ⚠ ${longSilences.length} silence(s) > 3s détecté(s) — vidéo OK mais à vérifier (relancer si besoin)`
+        );
       }
 
       if (i > 0) {
@@ -95,10 +101,11 @@ export async function synthesizeVoice(
 }
 
 /**
- * Compress silences longer than `thresholdSec` to `targetSec`.
- * Adjusts wordTimings accordingly. Returns null if no silence > threshold found.
+ * @deprecated Used to compress silences post-synthesis. Removed because the
+ * adjustment of wordTimings drifted vs ffmpeg's actual silenceremove output,
+ * causing subtitle desync at video end. Kept for reference; no longer called.
  */
-async function compressLongSilences(
+async function _compressLongSilences_unused(
   audioPath: string,
   wordTimings: WordTiming[],
   thresholdSec: number,

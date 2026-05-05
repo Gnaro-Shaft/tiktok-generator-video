@@ -23,8 +23,10 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
   cd "$PROJECT_DIR" || { echo "ERREUR: PROJECT_DIR introuvable: $PROJECT_DIR"; exit 1; }
 
-  # Run batch all (morning then evening, 3 niches in parallel each).
-  /opt/homebrew/bin/pnpm --filter @tt/cli start -- --batch --slot all --concurrency 3
+  # Run batch all (morning then evening) en séquentiel — concurrency=1 évite la
+  # contention Remotion+ffmpeg qui multiplie le temps total par 6 quand on tente 3 en //.
+  # 12 vidéos × ~3min = ~40-50min total, prêt vers 22h50.
+  /opt/homebrew/bin/pnpm --filter @tt/cli start -- --batch --slot all --concurrency 1
   RC=$?
 
   echo ""

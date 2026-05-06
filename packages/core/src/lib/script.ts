@@ -76,25 +76,37 @@ export async function generateScript(opts: GenerateOptions): Promise<GeneratedSc
   if (niche.mode === 'slides') {
     return {
       mode: 'slides',
-      topic: parsed.topic,
+      topic: parsed.topic ?? 'sujet inconnu',
       hook: parsed.hook,
-      scenes: parsed.scenes,
+      scenes: parsed.scenes ?? [],
       cta: parsed.cta,
-      caption: parsed.caption,
-      hashtags: parsed.hashtags,
-      keywords: parsed.keywords,
+      caption: parsed.caption ?? '',
+      hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
+      keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
     };
   }
 
-  const full_text = `${parsed.script.hook}. ${parsed.script.body} ${parsed.script.cta}`.trim();
+  // Narration mode: validate the structure Claude returned to avoid
+  // `Cannot read properties of undefined` at downstream steps.
+  if (!parsed.script || typeof parsed.script !== 'object') {
+    throw new Error(`Script JSON sans champ "script": ${text.slice(0, 200)}`);
+  }
+  const hook = parsed.script.hook ?? '';
+  const body = parsed.script.body ?? '';
+  const cta = parsed.script.cta ?? '';
+  if (!hook || !body) {
+    throw new Error(`Script incomplet (hook="${hook.slice(0, 30)}…", body=${body.length} chars)`);
+  }
+
+  const full_text = `${hook}. ${body} ${cta}`.trim();
   return {
     mode: 'narration',
-    topic: parsed.topic,
-    script: parsed.script,
+    topic: parsed.topic ?? 'sujet inconnu',
+    script: { hook, body, cta },
     full_text,
-    caption: parsed.caption,
-    hashtags: parsed.hashtags,
-    keywords: parsed.keywords,
+    caption: parsed.caption ?? '',
+    hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
+    keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
   };
 }
 

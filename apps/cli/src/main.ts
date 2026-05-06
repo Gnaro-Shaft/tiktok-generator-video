@@ -136,13 +136,23 @@ async function runCheck(args: Args): Promise<void> {
 }
 
 async function runOneSafe(nicheId: string, slot: Slot, skipRender?: boolean) {
-  try {
-    return await runOne(nicheId, slot, undefined, skipRender);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`❌ [${nicheId}] échec: ${msg}`);
-    return { nicheId, ok: false as const, error: msg };
+  // Retry once on transient network errors (fetch failed, timeout, etc.).
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await runOne(nicheId, slot, undefined, skipRender);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTransient = /fetch failed|ETIMEDOUT|ECONNRESET|ENOTFOUND|socket hang up|network/i.test(msg);
+      if (attempt === 1 && isTransient) {
+        console.warn(`⚠ [${nicheId}] erreur transitoire: ${msg} — retry dans 30s`);
+        await new Promise((r) => setTimeout(r, 30_000));
+        continue;
+      }
+      console.error(`❌ [${nicheId}] échec: ${msg}`);
+      return { nicheId, ok: false as const, error: msg };
+    }
   }
+  return { nicheId, ok: false as const, error: 'unreachable' };
 }
 
 /** Limit concurrency: process queue with N workers in parallel. */

@@ -8,9 +8,9 @@ description: >
 mode: narration
 
 duration:
-  min_sec: 62
-  target_sec: 68
-  max_sec: 75
+  min_sec: 65        # Bill parle un peu vite, on demande plus de mots
+  target_sec: 72
+  max_sec: 80
 
 voice:
   voice_id: pqHfZKP75CvOlQylNhV4  # Bill — masculin, grave, sérieux

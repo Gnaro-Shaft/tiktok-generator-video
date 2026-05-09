@@ -13,12 +13,32 @@ export interface VoiceSynthesisResult {
   keyIndex: number;
 }
 
-function isQuotaExceeded(err: unknown): boolean {
+/**
+ * Detect any ElevenLabs error indicating that THIS account cannot serve the
+ * request right now and we should try the next key in the pool. Covers:
+ *   - quota_exceeded (Creator/Pro quota epuisé)
+ *   - payment_issue (facture en attente, CB refusée/expirée)
+ *   - invalid_api_key (clé révoquée ou mauvaise)
+ *   - any other 401/402/403 (compte invalide/désactivé)
+ */
+function extractReason(err: unknown): string {
+  const e = err as { statusCode?: number; message?: string; body?: { detail?: { status?: string } } };
+  const status = e.body?.detail?.status;
+  if (status) return status;
+  const code = e.statusCode;
+  return code ? `HTTP ${code}` : 'unknown';
+}
+
+function isAccountUnavailable(err: unknown): boolean {
   if (!err) return false;
   const e = err as { statusCode?: number; status?: number; message?: string; body?: unknown };
   const code = e.statusCode ?? e.status;
   const msg = (e.message ?? '') + ' ' + JSON.stringify(e.body ?? '');
-  return code === 401 && /quota_exceeded|exceeds your quota/i.test(msg);
+  // 401 covers: quota_exceeded, payment_issue, invalid_api_key, etc.
+  // 402 = payment required, 403 = forbidden — also "this account can't serve".
+  if (code === 401 || code === 402 || code === 403) return true;
+  // Some SDKs surface ElevenLabs errors as a generic 4xx with status string.
+  return /quota_exceeded|payment_issue|invalid_api_key|subscription/i.test(msg);
 }
 
 export async function synthesizeVoice(
@@ -90,8 +110,11 @@ export async function synthesizeVoice(
       return { audioPath, durationSec, wordTimings, keyIndex: i + 1 };
     } catch (err) {
       lastErr = err;
-      if (isQuotaExceeded(err) && i + 1 < keys.length) {
-        console.log(`        [voice] compte #${i + 1} quota épuisé → bascule sur compte #${i + 2}`);
+      if (isAccountUnavailable(err) && i + 1 < keys.length) {
+        const reason = extractReason(err);
+        console.log(
+          `        [voice] compte #${i + 1} indisponible (${reason}) → bascule sur compte #${i + 2}`
+        );
         continue;
       }
       throw err;

@@ -86,13 +86,38 @@ export async function renderSlidesOverlay(
   return opts.outFile;
 }
 
+/** Max wall-clock time for a single Remotion render before killing it (8 min). */
+const RENDER_TIMEOUT_MS = 8 * 60 * 1000;
+
 function runCmd(cmd: string, args: string[], cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { cwd, stdio: 'inherit' });
+    let killed = false;
+    const timeout = setTimeout(() => {
+      killed = true;
+      console.error(
+        `[render] timeout après ${RENDER_TIMEOUT_MS / 1000}s — tue le processus (et tous ses enfants Remotion/Chrome)`
+      );
+      // Try graceful first, then force.
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch { /* ignore */ }
+      }, 3000);
+    }, RENDER_TIMEOUT_MS);
+
     child.on('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${cmd} exited with code ${code}`));
+      clearTimeout(timeout);
+      if (killed) {
+        reject(new Error(`Remotion render bloqué — tué après ${RENDER_TIMEOUT_MS / 1000}s`));
+      } else if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${cmd} exited with code ${code}`));
+      }
     });
-    child.on('error', reject);
+    child.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
   });
 }

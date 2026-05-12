@@ -54,7 +54,8 @@ export async function runPipeline(opts: RunOptions): Promise<RunResult> {
       result = await runSlidesPipeline(opts, generated, dayDir, tempDir, date);
     } else {
       // Narration: up to 2 retries to get the voice within [min_sec, max_sec].
-      let attempt = await runNarrationPipeline(opts, generated, dayDir, tempDir, date);
+      // Also retry on transient errors (Remotion timeout, fetch failed).
+      let attempt = await runNarrationWithTransientRetry(opts, generated, dayDir, tempDir, date);
       const { min_sec, max_sec } = opts.niche.duration;
       const MAX_RETRIES = 2;
       for (let i = 0; i < MAX_RETRIES; i++) {
@@ -70,7 +71,7 @@ export async function runPipeline(opts: RunOptions): Promise<RunResult> {
           forceLonger: tooShort,
           forceShorter: !tooShort,
         });
-        attempt = await runNarrationPipeline(opts, generated, dayDir, tempDir, date);
+        attempt = await runNarrationWithTransientRetry(opts, generated, dayDir, tempDir, date);
         attempts++;
       }
       result = attempt.result;
@@ -111,6 +112,36 @@ export async function runPipeline(opts: RunOptions): Promise<RunResult> {
     });
     throw err;
   }
+}
+
+/**
+ * Wrap runNarrationPipeline with a transient error retry (Remotion timeout,
+ * fetch failed). These are usually one-shot hiccups: a 2nd attempt with a
+ * short backoff almost always works.
+ */
+async function runNarrationWithTransientRetry(
+  opts: RunOptions,
+  generated: GeneratedScript,
+  dayDir: string,
+  tempDir: string,
+  date: string
+): Promise<{ result: RunResult; durationSec: number }> {
+  const MAX_TRANSIENT_RETRIES = 1;
+  let lastErr: unknown;
+  for (let i = 0; i <= MAX_TRANSIENT_RETRIES; i++) {
+    try {
+      return await runNarrationPipeline(opts, generated, dayDir, tempDir, date);
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTransient =
+        /Remotion render bloqué|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|getaddrinfo/i.test(msg);
+      if (!isTransient || i >= MAX_TRANSIENT_RETRIES) throw err;
+      console.log(`  ⚠ Erreur transitoire (${msg.slice(0, 80)}) — retry ${i + 1}/${MAX_TRANSIENT_RETRIES} dans 5s`);
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
+  throw lastErr;
 }
 
 async function runNarrationPipeline(

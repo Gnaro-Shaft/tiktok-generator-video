@@ -238,8 +238,7 @@ async function main(): Promise<void> {
 
   const r = await runOne(args.niche, args.slot, args.topic, args.skipRender);
   console.log('');
-  console.log(`   Caption:  ${r.result.captionPath}`);
-  console.log(`   Hashtags: ${r.result.hashtagsPath}`);
+  console.log(`   Post:     ${r.result.postPath}`);
   console.log(`   Meta:     ${r.result.metaPath}`);
 }
 

@@ -20,8 +20,8 @@ export interface RunOptions {
 
 export interface RunResult {
   videoPath: string;
-  captionPath: string;
-  hashtagsPath: string;
+  /** Single file containing caption + blank line + hashtags, ready to copy-paste to TikTok. */
+  postPath: string;
   metaPath: string;
 }
 
@@ -329,15 +329,19 @@ function writeSidecars(
   clips: { source: 'pexels' | 'pixabay'; url: string }[],
   voiceKeyIndex?: number
 ): RunResult {
-  const captionPath = path.join(dayDir, `${opts.slot}.caption.txt`);
-  const hashtagsPath = path.join(dayDir, `${opts.slot}.hashtags.txt`);
+  const postPath = path.join(dayDir, `${opts.slot}.txt`);
   const metaPath = path.join(dayDir, `${opts.slot}.meta.json`);
 
-  fs.writeFileSync(captionPath, generated.caption);
-  fs.writeFileSync(
-    hashtagsPath,
-    generated.hashtags.map((h) => `#${h.replace(/^#/, '')}`).join(' ')
-  );
+  const hashtagsLine = generated.hashtags.map((h) => `#${h.replace(/^#/, '')}`).join(' ');
+  fs.writeFileSync(postPath, `${generated.caption}\n\n${hashtagsLine}\n`);
+
+  // Cleanup ancien format (avant 2026-05-14) si présent.
+  for (const old of [`${opts.slot}.caption.txt`, `${opts.slot}.hashtags.txt`]) {
+    const p = path.join(dayDir, old);
+    if (fs.existsSync(p)) {
+      try { fs.unlinkSync(p); } catch { /* ignore */ }
+    }
+  }
   fs.writeFileSync(
     metaPath,
     JSON.stringify(
@@ -366,5 +370,5 @@ function writeSidecars(
     )
   );
 
-  return { videoPath, captionPath, hashtagsPath, metaPath };
+  return { videoPath, postPath, metaPath };
 }

@@ -61,6 +61,30 @@ async function detectSilencesAtThreshold(
   });
 }
 
+/** Count silences > thresholdSec in the LAST `windowSec` seconds of the audio. */
+async function countSilencesInLastWindow(
+  audioPath: string,
+  voiceDur: number,
+  thresholdSec: number,
+  windowSec: number
+): Promise<number> {
+  const startSec = Math.max(0, voiceDur - windowSec);
+  return new Promise((resolve) => {
+    const child = spawn(
+      'ffmpeg',
+      ['-ss', String(startSec), '-i', audioPath, '-af', `silencedetect=n=-30dB:d=${thresholdSec}`, '-f', 'null', '-'],
+      { stdio: ['ignore', 'ignore', 'pipe'] }
+    );
+    let stderr = '';
+    child.stderr.on('data', (d) => (stderr += d.toString()));
+    child.on('exit', () => {
+      const matches = stderr.match(/silence_duration:/g);
+      resolve(matches?.length ?? 0);
+    });
+    child.on('error', () => resolve(0));
+  });
+}
+
 /**
  * Run quality checks on a generated video. Returns issues found.
  *
@@ -146,6 +170,16 @@ export async function checkVideo(
         severity: 'warn',
         code: 'LONG_SILENCES',
         message: `${silences15} silence(s) > 1.5s détecté(s) — ralentissement perceptible`,
+      });
+    }
+
+    // Detect end-of-video slowdown: multiple silences > 0.5s in the last 7s.
+    const endSilences = await countSilencesInLastWindow(voice, voiceDur, 0.5, 7);
+    if (endSilences >= 2) {
+      issues.push({
+        severity: 'warn',
+        code: 'END_SLOWDOWN',
+        message: `${endSilences} silence(s) > 0.5s dans les 7 dernières secondes — voix qui traîne en fin (gênant à l'oreille)`,
       });
     }
   }

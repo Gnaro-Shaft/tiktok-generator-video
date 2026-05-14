@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { env } from './config.js';
+import { env, NICHES_DIR } from './config.js';
 import type { NicheStock, StockClip } from '../types/index.js';
 
 /**
@@ -19,18 +19,80 @@ const KEYWORD_BLOCKLIST = [
   'green screen', 'greenscreen', 'chroma key', 'chromakey', 'blue screen', 'bluescreen',
 ];
 
+/** Days of history during which a clip is considered "recently used" and avoided. */
+const USED_CLIPS_RECENT_DAYS = 30;
+/** How many candidates we ask each provider to maximize variety. */
+const PROVIDER_PER_PAGE = 30;
+/** Random page (1..MAX_PAGE) selected for each query — extends discovery beyond top 30. */
+const MAX_RANDOM_PAGE = 3;
+
 function isKeywordSafe(kw: string): boolean {
   const lower = kw.toLowerCase();
   return !KEYWORD_BLOCKLIST.some((b) => lower.includes(b));
 }
 
+function clipKey(clip: StockClip): string {
+  return `${clip.source}:${clip.id}`;
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function randomPage(): number {
+  return Math.floor(Math.random() * MAX_RANDOM_PAGE) + 1;
+}
+
+function usedClipsFile(nicheId: string): string {
+  return path.join(NICHES_DIR, nicheId, 'state', 'used-clips.jsonl');
+}
+
+function loadRecentlyUsedClips(nicheId: string): Set<string> {
+  const file = usedClipsFile(nicheId);
+  if (!fs.existsSync(file)) return new Set();
+  const cutoff = Date.now() - USED_CLIPS_RECENT_DAYS * 24 * 60 * 60 * 1000;
+  const ids = new Set<string>();
+  for (const line of fs.readFileSync(file, 'utf-8').trim().split('\n')) {
+    if (!line) continue;
+    try {
+      const entry = JSON.parse(line) as { ts: string; key: string };
+      if (new Date(entry.ts).getTime() > cutoff) {
+        ids.add(entry.key);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return ids;
+}
+
+function saveUsedClips(nicheId: string, keys: string[]): void {
+  if (keys.length === 0) return;
+  const file = usedClipsFile(nicheId);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const ts = new Date().toISOString();
+  const lines = keys.map((key) => JSON.stringify({ ts, key }));
+  fs.appendFileSync(file, lines.join('\n') + '\n');
+}
+
 export async function searchStock(
   keywords: string[],
   cfg: NicheStock,
-  outDir: string
+  outDir: string,
+  nicheId?: string
 ): Promise<StockClip[]> {
   fs.mkdirSync(outDir, { recursive: true });
   const clips: StockClip[] = [];
+  const sessionUsed = new Set<string>(); // clips already picked in this run (avoid duplicates within the same video)
+  const recentlyUsed = nicheId ? loadRecentlyUsedClips(nicheId) : new Set<string>();
+  if (recentlyUsed.size > 0) {
+    console.log(`        [stock] ${recentlyUsed.size} clip(s) déjà utilisé(s) < ${USED_CLIPS_RECENT_DAYS}j → exclusion`);
+  }
 
   const safeKeywords = keywords.filter((kw) => {
     const ok = isKeywordSafe(kw);
@@ -39,13 +101,25 @@ export async function searchStock(
   });
 
   for (const kw of safeKeywords) {
-    let found = await searchProvider(kw, cfg, cfg.primary);
+    // Randomly alternate primary provider for additional diversity.
+    const primary = Math.random() < 0.5 ? cfg.primary : (cfg.primary === 'pexels' ? 'pixabay' : 'pexels');
+    let found = await searchProvider(kw, cfg, primary);
     if (found.length === 0) {
-      const fallback = cfg.primary === 'pexels' ? 'pixabay' : 'pexels';
+      const fallback = primary === 'pexels' ? 'pixabay' : 'pexels';
       found = await searchProvider(kw, cfg, fallback);
     }
+
+    // Filter out recently-used + same-session-used clips, then shuffle.
+    const fresh = found.filter((c) => {
+      const k = clipKey(c);
+      return !recentlyUsed.has(k) && !sessionUsed.has(k);
+    });
+    // If filtering left less than we want, fall back to including session-used (still excluding recently-used).
+    const pool = fresh.length >= cfg.per_keyword ? fresh : found.filter((c) => !recentlyUsed.has(clipKey(c)));
+    const shuffled = shuffle(pool);
+
     let kept = 0;
-    for (const clip of found) {
+    for (const clip of shuffled) {
       if (kept >= cfg.per_keyword) break;
       const local = await downloadClip(clip, outDir);
       if (!local) continue;
@@ -55,10 +129,18 @@ export async function searchStock(
         try { fs.unlinkSync(local); } catch { /* ignore */ }
         continue;
       }
-      clips.push({ ...clip, local_path: local });
+      const finalClip = { ...clip, local_path: local };
+      clips.push(finalClip);
+      sessionUsed.add(clipKey(clip));
       kept++;
     }
   }
+
+  // Persist the clips we used so subsequent runs of this niche avoid them for 30 days.
+  if (nicheId && clips.length > 0) {
+    saveUsedClips(nicheId, clips.map((c) => clipKey(c)));
+  }
+
   return clips;
 }
 
@@ -69,7 +151,6 @@ export async function searchStock(
  */
 async function isLikelyGreenScreen(clipPath: string): Promise<boolean> {
   return new Promise((resolve) => {
-    // Sample every ~30th frame (about 1 frame per second at 30fps).
     const child = spawn(
       'ffmpeg',
       [
@@ -94,18 +175,15 @@ async function isLikelyGreenScreen(clipPath: string): Promise<boolean> {
         resolve(false);
         return;
       }
-      // Count frames matching green chroma signature.
       let greenFrames = 0;
       for (let i = 0; i < yMatches.length; i++) {
         const y = yMatches[i];
         const u = uMatches[i] ?? 128;
         const v = vMatches[i] ?? 128;
-        // Pure green chromakey: Y in [120, 200], U well below 128, V below 128.
         if (y > 100 && y < 220 && u < 80 && v < 90) {
           greenFrames++;
         }
       }
-      // If > 30% of sampled frames are green-dominant, reject.
       const ratio = greenFrames / yMatches.length;
       resolve(ratio > 0.3);
     });
@@ -123,15 +201,16 @@ async function searchProvider(
 }
 
 async function searchPexels(keyword: string, cfg: NicheStock): Promise<StockClip[]> {
+  const page = randomPage();
   const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(
     keyword
-  )}&orientation=${cfg.orientation}&per_page=${cfg.per_keyword * 2}&size=medium`;
+  )}&orientation=${cfg.orientation}&per_page=${PROVIDER_PER_PAGE}&size=medium&page=${page}`;
   const resp = await fetch(url, {
     headers: { Authorization: env().PEXELS_API_KEY },
   });
   if (!resp.ok) return [];
   const data = (await resp.json()) as {
-    videos: { duration: number; video_files: { link: string; quality: string; width: number }[] }[];
+    videos: { id: number; duration: number; video_files: { link: string; quality: string; width: number }[] }[];
   };
   const clips: StockClip[] = [];
   for (const v of data.videos ?? []) {
@@ -140,26 +219,27 @@ async function searchPexels(keyword: string, cfg: NicheStock): Promise<StockClip
       v.video_files.find((f) => f.quality === 'hd' && f.width >= 720) ??
       v.video_files[0];
     if (!file) continue;
-    clips.push({ url: file.link, source: 'pexels', duration: v.duration });
+    clips.push({ id: v.id, url: file.link, source: 'pexels', duration: v.duration });
   }
   return clips;
 }
 
 async function searchPixabay(keyword: string, cfg: NicheStock): Promise<StockClip[]> {
+  const page = randomPage();
   const url = `https://pixabay.com/api/videos/?key=${env().PIXABAY_API_KEY}&q=${encodeURIComponent(
     keyword
-  )}&per_page=${Math.max(3, cfg.per_keyword * 2)}&orientation=vertical&safesearch=true`;
+  )}&per_page=${PROVIDER_PER_PAGE}&orientation=vertical&safesearch=true&page=${page}`;
   const resp = await fetch(url);
   if (!resp.ok) return [];
   const data = (await resp.json()) as {
-    hits: { duration: number; videos: Record<string, { url: string; width: number }> }[];
+    hits: { id: number; duration: number; videos: Record<string, { url: string; width: number }> }[];
   };
   const clips: StockClip[] = [];
   for (const v of data.hits ?? []) {
     if (v.duration < cfg.min_clip_duration || v.duration > cfg.max_clip_duration) continue;
     const variant = v.videos.medium ?? v.videos.small ?? v.videos.tiny;
     if (!variant) continue;
-    clips.push({ url: variant.url, source: 'pixabay', duration: v.duration });
+    clips.push({ id: v.id, url: variant.url, source: 'pixabay', duration: v.duration });
   }
   return clips;
 }
@@ -167,7 +247,7 @@ async function searchPixabay(keyword: string, cfg: NicheStock): Promise<StockCli
 async function downloadClip(clip: StockClip, outDir: string): Promise<string | null> {
   try {
     const ext = '.mp4';
-    const name = `${clip.source}-${Math.abs(hash(clip.url))}${ext}`;
+    const name = `${clip.source}-${clip.id}${ext}`;
     const dest = path.join(outDir, name);
     if (fs.existsSync(dest)) return dest;
     const resp = await fetch(clip.url);
@@ -178,13 +258,4 @@ async function downloadClip(clip: StockClip, outDir: string): Promise<string | n
   } catch {
     return null;
   }
-}
-
-function hash(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = (h << 5) - h + s.charCodeAt(i);
-    h |= 0;
-  }
-  return h;
 }

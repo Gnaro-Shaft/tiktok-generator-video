@@ -113,6 +113,8 @@ export interface SubtitleSegment {
 }
 
 export interface StockClip {
+  /** Native provider id — used for deduplication across runs. */
+  id: number;
   url: string;
   source: 'pexels' | 'pixabay';
   duration: number;

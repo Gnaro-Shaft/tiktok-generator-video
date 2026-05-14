@@ -187,7 +187,7 @@ async function runNarrationPipeline(
 
   console.log(`  [4/6] Téléchargement stock (${generated.keywords.length} keywords)…`);
   const clipsDir = path.join(tempDir, 'clips');
-  const clips = await searchStock(generated.keywords, opts.niche.stock, clipsDir);
+  const clips = await searchStock(generated.keywords, opts.niche.stock, clipsDir, opts.niche.id);
   console.log(`        ${clips.length} clips récupérés`);
 
   const fps = opts.niche.video.fps;
@@ -284,7 +284,7 @@ async function runSlidesPipeline(
 
   console.log(`  [4/5] Téléchargement stock (${generated.keywords.length} keywords)…`);
   const clipsDir = path.join(tempDir, 'clips');
-  const clips = await searchStock(generated.keywords, opts.niche.stock, clipsDir);
+  const clips = await searchStock(generated.keywords, opts.niche.stock, clipsDir, opts.niche.id);
   console.log(`        ${clips.length} clips récupérés`);
 
   const overlayPath = path.join(tempDir, 'overlay.mov');

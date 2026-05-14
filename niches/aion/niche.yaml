@@ -14,7 +14,7 @@ duration:
 
 voice:
   voice_id: onwK4e9ZLuTAKqWW03F9  # Daniel — narrateur posé, meilleure prononciation FR
-  model_id: eleven_multilingual_v2
+  model_id: eleven_turbo_v2_5
   stability: 0.60                  # AION est posé, monocorde mesuré
   similarity_boost: 0.78
   style: 0.25                      # peu d'émotion — entité froide

@@ -14,7 +14,7 @@ duration:
 
 voice:
   voice_id: ErXwobaYiN019PkySvjV  # Antoni — masculin, chaleureux, énergique
-  model_id: eleven_multilingual_v2
+  model_id: eleven_turbo_v2_5
   stability: 0.45        # 0.32 donnait des variations de rythme — remonté pour régularité
   similarity_boost: 0.78
   style: 0.50            # 0.65 trop expressif — équilibré

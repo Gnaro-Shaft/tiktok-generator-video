@@ -14,7 +14,7 @@ duration:
 
 voice:
   voice_id: pNInz6obpgDQGcFmaJgB  # Adam — masculin, posé, journalistique
-  model_id: eleven_multilingual_v2
+  model_id: eleven_turbo_v2_5
   stability: 0.55        # remonté pour éviter pauses anormales sur phrases longues
   similarity_boost: 0.78
   style: 0.35

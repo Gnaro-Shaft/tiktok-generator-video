@@ -34,10 +34,19 @@ function runFfmpeg(args: string[]): Promise<void> {
   });
 }
 
+/** Cross-fade duration between consecutive clips (seconds). */
+const TRANSITION_DUR = 0.5;
+/** Overscan multiplier for Ken Burns pan margin (15% extra around each clip). */
+const KEN_BURNS_OVERSCAN = 1.15;
+
 /**
  * Build a TikTok-ready vertical background from stock clips.
- * Each clip is looped (stream_loop) to fill its allocated slot, scaled+cropped vertical,
- * then concatenated. This eliminates the "saccadé" feel of clips ending prematurely.
+ *
+ * Features:
+ *  - Each clip is looped (stream_loop) to fill its allocated slot — fluidity ++
+ *  - Ken Burns pan: subtle slow pan on each clip (direction alternated) — adds motion
+ *  - Cross-fade transitions between consecutive clips (0.5s) — smooth, pro feel
+ *  - format=yuv420p forced to prevent green/blue screen glitches
  */
 async function buildBackground(
   clips: ClipInput[],
@@ -65,26 +74,86 @@ async function buildBackground(
     return;
   }
 
-  const perClip = durationSec / clips.length;
+  const N = clips.length;
+  // With xfade, two consecutive clips overlap by TRANSITION_DUR. So total visible
+  // duration = N * perClip - (N - 1) * TRANSITION_DUR. We want this to equal durationSec,
+  // so adjust perClip upward to compensate.
+  const useXfade = N > 1;
+  const perClip = useXfade
+    ? (durationSec + (N - 1) * TRANSITION_DUR) / N
+    : durationSec;
+
   const args: string[] = ['-y'];
   for (const c of clips) {
     args.push('-stream_loop', '-1', '-i', c.local_path);
   }
 
+  const scaleW = Math.ceil(width * KEN_BURNS_OVERSCAN);
+  const scaleH = Math.ceil(height * KEN_BURNS_OVERSCAN);
+  const xMargin = scaleW - width; // pan range horizontal
+  const yMargin = scaleH - height; // pan range vertical
+  const D = perClip.toFixed(3);
+
   const filters: string[] = [];
-  const labels: string[] = [];
-  for (let i = 0; i < clips.length; i++) {
-    // Force format=yuv420p + setrange limited to avoid green/blue screen glitches
-    // when source clips have unknown color metadata.
+  for (let i = 0; i < N; i++) {
+    // Alternate pan direction every clip for visual diversity.
+    // 4 directions: left→right, right→left, top→bottom, bottom→top.
+    const direction = ['lr', 'rl', 'tb', 'bt'][i % 4];
+    let xExpr: string;
+    let yExpr: string;
+    switch (direction) {
+      case 'lr':
+        xExpr = `${xMargin}*t/${D}`;
+        yExpr = `${yMargin}/2`;
+        break;
+      case 'rl':
+        xExpr = `${xMargin}*(1-t/${D})`;
+        yExpr = `${yMargin}/2`;
+        break;
+      case 'tb':
+        xExpr = `${xMargin}/2`;
+        yExpr = `${yMargin}*t/${D}`;
+        break;
+      default: // bt
+        xExpr = `${xMargin}/2`;
+        yExpr = `${yMargin}*(1-t/${D})`;
+        break;
+    }
+
+    // Pipeline per clip:
+    //  trim → reset PTS → scale exact to overscan W:H → pan-crop W:H → format
+    // Two-step scale keeps the canvas size deterministic regardless of source aspect.
     filters.push(
-      `[${i}:v]trim=duration=${perClip.toFixed(3)},setpts=PTS-STARTPTS,` +
+      `[${i}:v]trim=duration=${D},setpts=PTS-STARTPTS,` +
         `scale=${width}:${height}:force_original_aspect_ratio=increase,` +
-        `crop=${width}:${height},setsar=1,fps=${fps},` +
-        `format=yuv420p[v${i}]`
+        `crop=${width}:${height},` +
+        `scale=${scaleW}:${scaleH},` +
+        `crop=${width}:${height}:x='${xExpr}':y='${yExpr}',` +
+        `setsar=1,fps=${fps},format=yuv420p[v${i}]`
     );
-    labels.push(`[v${i}]`);
   }
-  filters.push(`${labels.join('')}concat=n=${clips.length}:v=1:a=0[outv]`);
+
+  // Chain xfade transitions between consecutive clips, or single passthrough.
+  if (!useXfade) {
+    filters.push(`[v0]null[outv]`);
+  } else {
+    let prev = '[v0]';
+    for (let i = 1; i < N; i++) {
+      // Output of i-th xfade starts at (i+1)*perClip - i*TRANSITION_DUR seconds total,
+      // and the xfade itself begins at i*perClip - i*TRANSITION_DUR + (perClip - TRANSITION_DUR)
+      // = (i+1)*perClip - (i+1)*TRANSITION_DUR. But offset is measured from input start of
+      // the first input ([prev]), so it's (cumulated duration of prev) - TRANSITION_DUR.
+      // Cumulated duration of prev after i-1 xfades = i*perClip - (i-1)*TRANSITION_DUR.
+      // xfade starts at that minus TRANSITION_DUR = i*perClip - i*TRANSITION_DUR.
+      const offset = i * perClip - i * TRANSITION_DUR;
+      const isLast = i === N - 1;
+      const out = isLast ? '[outv]' : `[x${i}]`;
+      filters.push(
+        `${prev}[v${i}]xfade=transition=fade:duration=${TRANSITION_DUR}:offset=${offset.toFixed(3)}${out}`
+      );
+      prev = out;
+    }
+  }
 
   args.push(
     '-filter_complex',

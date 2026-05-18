@@ -34,6 +34,7 @@ interface Args {
   publish?: boolean;
   analytics?: boolean;
   privacy?: PrivacyLevel;
+  regen?: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -43,6 +44,7 @@ function parseArgs(argv: string[]): Args {
     if (a === '--list') out.list = true;
     else if (a === '--batch') out.batch = true;
     else if (a === '--check') out.check = true;
+    else if (a === '--regen') out.regen = true;
     else if (a === '--tiktok-auth') out.tiktokAuth = true;
     else if (a === '--publish') out.publish = true;
     else if (a === '--analytics') out.analytics = true;
@@ -72,6 +74,7 @@ Usage:
   tt --niche <id> --slot <morning|evening> [--topic "sujet"] [--skip-render]
   tt --batch --slot <morning|evening|all> [--concurrency 3]
   tt --check [--niche <id>] [--slot <morning|evening|all>] [--date YYYY-MM-DD]
+  tt --regen --niche <id> --slot <morning|evening> [--date YYYY-MM-DD]   # régénère sans toucher au state/
   tt --tiktok-auth --niche <id>                      # étape 1 : affiche l'URL d'autorisation
   tt --tiktok-auth --niche <id> --tiktok-code <CODE> # étape 2 : enregistre le token
   tt --publish --niche <id> --slot <morning|evening> [--date ...] [--privacy SELF_ONLY]
@@ -85,17 +88,17 @@ Examples:
 `);
 }
 
-async function runOne(nicheId: string, slot: Slot, topic?: string, skipRender?: boolean) {
+async function runOne(nicheId: string, slot: Slot, topic?: string, skipRender?: boolean, date?: string) {
   const start = Date.now();
   console.log(`▶ [${nicheId}] début (slot=${slot})`);
   const niche = loadNiche(nicheId);
-  const result = await runPipeline({ niche, slot, topicHint: topic, skipRender });
+  const result = await runPipeline({ niche, slot, topicHint: topic, skipRender, date });
   const took = ((Date.now() - start) / 1000).toFixed(1);
   console.log(`✅ [${nicheId}] terminé en ${took}s → ${result.videoPath}`);
 
   // Auto-check post-génération.
   if (!skipRender) {
-    const check = await checkVideo(niche, slot, todayParis());
+    const check = await checkVideo(niche, slot, date ?? todayParis());
     console.log('   ' + formatCheckLine(check));
     for (const issue of check.issues) {
       const icon = issue.severity === 'error' ? '   ❌' : '   ⚠️';
@@ -298,6 +301,37 @@ async function runAnalytics(args: Args): Promise<void> {
   }
 }
 
+/**
+ * Régénération chirurgicale d'une vidéo : supprime UNIQUEMENT les fichiers du
+ * slot (.mp4/.txt/.meta.json + .tmp/<slot>) et NE TOUCHE JAMAIS au dossier
+ * state/ (topic-history + used-clips). Garde l'anti-doublon intact.
+ */
+async function runRegen(args: Args): Promise<void> {
+  if (!args.niche || !args.slot || (args.slot !== 'morning' && args.slot !== 'evening')) {
+    console.error('Usage: tt --regen --niche <id> --slot <morning|evening> [--date YYYY-MM-DD]');
+    process.exit(1);
+  }
+  const date = args.date ?? todayParis();
+  const dayDir = path.join(OUTPUT_DIR, args.niche, date);
+
+  // Nettoyage chirurgical — fichiers du slot uniquement, jamais state/.
+  let removed = 0;
+  for (const ext of ['mp4', 'txt', 'meta.json', 'caption.txt', 'hashtags.txt']) {
+    const f = path.join(dayDir, `${args.slot}.${ext}`);
+    if (fs.existsSync(f)) {
+      fs.rmSync(f);
+      removed++;
+    }
+  }
+  const tmp = path.join(dayDir, '.tmp', args.slot);
+  if (fs.existsSync(tmp)) {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    removed++;
+  }
+  console.log(`▶ Régénération [${args.niche}/${args.slot}] date=${date} — ${removed} élément(s) nettoyé(s), state/ préservé`);
+  await runOne(args.niche, args.slot, args.topic, args.skipRender, date);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv);
 
@@ -310,6 +344,11 @@ async function main(): Promise<void> {
 
   if (args.check) {
     await runCheck(args);
+    return;
+  }
+
+  if (args.regen) {
+    await runRegen(args);
     return;
   }
 

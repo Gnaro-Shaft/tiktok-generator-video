@@ -12,11 +12,11 @@ duration:
   max_sec: 75
 
 voice:
-  voice_id: XrExE9yKIg1WjnnlVkGX  # Matilda
+  voice_id: OKpKhTrwN6S16IfQTHzZ  # Raphael — FR natif, ads/réseaux sociaux (zéro accent)
   model_id: eleven_turbo_v2_5
-  stability: 0.38           # baissé : plus de variation, moins monotone
-  similarity_boost: 0.72
-  style: 0.55               # remonté : plus d'expressivité
+  stability: 0.45
+  similarity_boost: 0.75
+  style: 0.45
   use_speaker_boost: true
 
 theme:

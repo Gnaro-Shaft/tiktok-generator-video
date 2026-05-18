@@ -13,11 +13,11 @@ duration:
   max_sec: 72
 
 voice:
-  voice_id: ErXwobaYiN019PkySvjV  # Antoni — masculin, chaleureux, énergique
+  voice_id: PWMsXrscExaV05YVAl7P  # Alexis — FR natif, calme & narratif (zéro accent)
   model_id: eleven_turbo_v2_5
-  stability: 0.45        # 0.32 donnait des variations de rythme — remonté pour régularité
+  stability: 0.45
   similarity_boost: 0.78
-  style: 0.50            # 0.65 trop expressif — équilibré
+  style: 0.50
   use_speaker_boost: true
 
 theme:

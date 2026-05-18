@@ -1,13 +1,22 @@
 #!/usr/bin/env -S npx tsx
 import 'dotenv/config';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   runPipeline,
   loadNiche,
   listNiches,
   checkVideo,
   formatCheckLine,
+  getAuthorizationUrl,
+  exchangeCodeForToken,
+  isConnected,
+  publishVideo,
+  collectAnalytics,
+  OUTPUT_DIR,
   type Slot,
   type CheckResult,
+  type PrivacyLevel,
 } from '@tt/core';
 
 interface Args {
@@ -20,6 +29,11 @@ interface Args {
   concurrency?: number;
   check?: boolean;
   date?: string;
+  tiktokAuth?: boolean;
+  tiktokCode?: string;
+  publish?: boolean;
+  analytics?: boolean;
+  privacy?: PrivacyLevel;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -29,6 +43,9 @@ function parseArgs(argv: string[]): Args {
     if (a === '--list') out.list = true;
     else if (a === '--batch') out.batch = true;
     else if (a === '--check') out.check = true;
+    else if (a === '--tiktok-auth') out.tiktokAuth = true;
+    else if (a === '--publish') out.publish = true;
+    else if (a === '--analytics') out.analytics = true;
     else if (a === '--niche') out.niche = argv[++i];
     else if (a.startsWith('--niche=')) out.niche = a.slice(8);
     else if (a === '--slot') out.slot = argv[++i] as Slot;
@@ -37,6 +54,10 @@ function parseArgs(argv: string[]): Args {
     else if (a.startsWith('--topic=')) out.topic = a.slice(8);
     else if (a === '--date') out.date = argv[++i];
     else if (a.startsWith('--date=')) out.date = a.slice(7);
+    else if (a === '--tiktok-code') out.tiktokCode = argv[++i];
+    else if (a.startsWith('--tiktok-code=')) out.tiktokCode = a.slice(14);
+    else if (a === '--privacy') out.privacy = argv[++i] as PrivacyLevel;
+    else if (a.startsWith('--privacy=')) out.privacy = a.slice(10) as PrivacyLevel;
     else if (a === '--concurrency') out.concurrency = Number(argv[++i]);
     else if (a.startsWith('--concurrency=')) out.concurrency = Number(a.slice(14));
     else if (a === '--skip-render') out.skipRender = true;
@@ -51,6 +72,10 @@ Usage:
   tt --niche <id> --slot <morning|evening> [--topic "sujet"] [--skip-render]
   tt --batch --slot <morning|evening|all> [--concurrency 3]
   tt --check [--niche <id>] [--slot <morning|evening|all>] [--date YYYY-MM-DD]
+  tt --tiktok-auth --niche <id>                      # étape 1 : affiche l'URL d'autorisation
+  tt --tiktok-auth --niche <id> --tiktok-code <CODE> # étape 2 : enregistre le token
+  tt --publish --niche <id> --slot <morning|evening> [--date ...] [--privacy SELF_ONLY]
+  tt --analytics [--niche <id>]                      # récupère les stats TikTok
 
 Examples:
   tt --niche business-ia --slot morning
@@ -189,6 +214,90 @@ async function runBatch(slot: Slot, concurrency: number, skipRender?: boolean) {
   }
 }
 
+async function runTikTokAuth(args: Args): Promise<void> {
+  if (!args.niche) {
+    console.error('Usage: tt --tiktok-auth --niche <id> [--tiktok-code <CODE>]');
+    process.exit(1);
+  }
+  // Étape 2 : on a le code → on échange contre un token.
+  if (args.tiktokCode) {
+    console.log(`▶ Échange du code pour [${args.niche}]…`);
+    const tokens = await exchangeCodeForToken(args.niche, args.tiktokCode);
+    console.log(`✅ [${args.niche}] connecté à TikTok (open_id: ${tokens.open_id})`);
+    console.log(`   Scopes: ${tokens.scope}`);
+    return;
+  }
+  // Étape 1 : afficher l'URL d'autorisation.
+  const url = getAuthorizationUrl(args.niche);
+  console.log('');
+  console.log(`▶ Autorisation TikTok pour [${args.niche}]`);
+  console.log('');
+  console.log('1. Ouvre cette URL dans ton navigateur (connecté au BON compte TikTok) :');
+  console.log('');
+  console.log(`   ${url}`);
+  console.log('');
+  console.log('2. Autorise l\'app. Tu seras redirigé vers la page callback.');
+  console.log('3. Copie le code affiché, puis lance :');
+  console.log('');
+  console.log(`   tt --tiktok-auth --niche ${args.niche} --tiktok-code <CODE>`);
+  console.log('');
+}
+
+async function runPublish(args: Args): Promise<void> {
+  if (!args.niche || !args.slot) {
+    console.error('Usage: tt --publish --niche <id> --slot <morning|evening> [--date ...] [--privacy SELF_ONLY]');
+    process.exit(1);
+  }
+  if (!isConnected(args.niche)) {
+    console.error(`❌ [${args.niche}] non connectée à TikTok. Lance d'abord: tt --tiktok-auth --niche ${args.niche}`);
+    process.exit(1);
+  }
+  const date = args.date ?? todayParis();
+  const dayDir = path.join(OUTPUT_DIR, args.niche, date);
+  const videoPath = path.join(dayDir, `${args.slot}.mp4`);
+  const postPath = path.join(dayDir, `${args.slot}.txt`);
+  if (!fs.existsSync(videoPath)) {
+    console.error(`❌ Vidéo introuvable: ${videoPath}`);
+    process.exit(1);
+  }
+  const title = fs.existsSync(postPath)
+    ? fs.readFileSync(postPath, 'utf-8').trim()
+    : `${args.niche} ${args.slot}`;
+
+  console.log(`▶ Publication TikTok [${args.niche}/${args.slot}] (privacy=${args.privacy ?? 'SELF_ONLY'})…`);
+  const result = await publishVideo({
+    nicheId: args.niche,
+    videoPath,
+    title,
+    privacyLevel: args.privacy ?? 'SELF_ONLY',
+  });
+  console.log(`✅ Publié — publish_id=${result.publishId}, statut=${result.status}`);
+}
+
+async function runAnalytics(args: Args): Promise<void> {
+  const niches = args.niche ? [args.niche] : listNiches();
+  console.log(`▶ Collecte analytics TikTok — ${niches.join(', ')}`);
+  console.log('');
+  for (const nicheId of niches) {
+    if (!isConnected(nicheId)) {
+      console.log(`⏭  ${nicheId.padEnd(13)} non connectée — skip`);
+      continue;
+    }
+    try {
+      const { account, videos } = await collectAnalytics(nicheId);
+      console.log(
+        `📊 ${nicheId.padEnd(13)} ${account.follower_count} abonnés · ${account.likes_count} likes · ${account.video_count} vidéos`
+      );
+      const top = [...videos].sort((a, b) => b.view_count - a.view_count)[0];
+      if (top) {
+        console.log(`   top vidéo: ${top.view_count} vues — "${top.title.slice(0, 50)}"`);
+      }
+    } catch (err) {
+      console.log(`❌ ${nicheId.padEnd(13)} ${err instanceof Error ? err.message : err}`);
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv);
 
@@ -201,6 +310,21 @@ async function main(): Promise<void> {
 
   if (args.check) {
     await runCheck(args);
+    return;
+  }
+
+  if (args.tiktokAuth) {
+    await runTikTokAuth(args);
+    return;
+  }
+
+  if (args.publish) {
+    await runPublish(args);
+    return;
+  }
+
+  if (args.analytics) {
+    await runAnalytics(args);
     return;
   }
 

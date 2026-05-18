@@ -24,6 +24,10 @@ export interface Env {
   PEXELS_API_KEY: string;
   PIXABAY_API_KEY: string;
   REMOTION_CONCURRENCY: number;
+  /** TikTok app credentials — optionnels tant que l'app n'est pas créée. */
+  TIKTOK_CLIENT_KEY: string;
+  TIKTOK_CLIENT_SECRET: string;
+  TIKTOK_REDIRECT_URI: string;
 }
 
 function required(name: string): string {
@@ -54,6 +58,25 @@ export function env(): Env {
     PEXELS_API_KEY: required('PEXELS_API_KEY'),
     PIXABAY_API_KEY: required('PIXABAY_API_KEY'),
     REMOTION_CONCURRENCY: Number(process.env.REMOTION_CONCURRENCY ?? 4),
+    TIKTOK_CLIENT_KEY: process.env.TIKTOK_CLIENT_KEY ?? '',
+    TIKTOK_CLIENT_SECRET: process.env.TIKTOK_CLIENT_SECRET ?? '',
+    TIKTOK_REDIRECT_URI:
+      process.env.TIKTOK_REDIRECT_URI ?? 'https://www.gcn-data.fr/tiktok-callback.html',
+  };
+}
+
+/** Throws if TikTok credentials are not yet configured. */
+export function requireTikTokEnv(): { clientKey: string; clientSecret: string; redirectUri: string } {
+  const e = env();
+  if (!e.TIKTOK_CLIENT_KEY || !e.TIKTOK_CLIENT_SECRET) {
+    throw new Error(
+      'TikTok non configuré — ajoute TIKTOK_CLIENT_KEY et TIKTOK_CLIENT_SECRET dans .env (depuis developers.tiktok.com)'
+    );
+  }
+  return {
+    clientKey: e.TIKTOK_CLIENT_KEY,
+    clientSecret: e.TIKTOK_CLIENT_SECRET,
+    redirectUri: e.TIKTOK_REDIRECT_URI,
   };
 }
 

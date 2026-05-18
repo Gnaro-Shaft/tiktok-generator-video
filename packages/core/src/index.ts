@@ -9,3 +9,6 @@ export * from './lib/compose.js';
 export * from './lib/state.js';
 export * from './lib/pipeline.js';
 export * from './lib/check.js';
+export * from './lib/tiktok-auth.js';
+export * from './lib/tiktok-publish.js';
+export * from './lib/tiktok-analytics.js';

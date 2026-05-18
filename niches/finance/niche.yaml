@@ -39,7 +39,7 @@ stock:
   orientation: portrait
 
 music:
-  enabled: false
+  enabled: true
   mood: corporate
   volume_db: -20
 

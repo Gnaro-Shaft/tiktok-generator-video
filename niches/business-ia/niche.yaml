@@ -38,7 +38,7 @@ stock:
   orientation: portrait
 
 music:
-  enabled: false       # active une fois les mp3 déposés dans assets/music/corporate/
+  enabled: true
   mood: corporate
   volume_db: -18
 

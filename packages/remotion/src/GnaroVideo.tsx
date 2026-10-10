@@ -2,7 +2,7 @@ import React from 'react';
 import { AbsoluteFill, Audio, Sequence, Series, staticFile } from 'remotion';
 import { GnaroSceneRenderer } from './GnaroOverlay';
 
-export type GnaroSceneType = 'episode_title' | 'intertitle' | 'shock' | 'clip' | 'image' | 'logo';
+export type GnaroSceneType = 'episode_title' | 'intertitle' | 'shock' | 'clip' | 'image' | 'logo' | 'diagram';
 
 export interface GnaroScene {
   id: string;
@@ -14,6 +14,7 @@ export interface GnaroScene {
   emphasis?: string;
   clip_path?: string;
   image_path?: string;
+  stage?: string;
   duration_sec: number;
 }
 

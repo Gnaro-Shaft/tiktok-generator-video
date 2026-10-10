@@ -4,6 +4,7 @@ import { GNARO } from './GnaroBrand';
 import type { GnaroScene } from './GnaroVideo';
 import { Cursor, GrainOverlay, renderEmphasis, useFade } from './GnaroShared';
 import { FilmClipScene, FilmImageScene } from './GnaroFilmScenes';
+import { DiagramScene } from './GnaroDiagram';
 
 // ── Episode title card ──────────────────────────────────────────────────────
 
@@ -264,6 +265,8 @@ export const GnaroSceneRenderer: React.FC<{
       return <FilmClipScene scene={scene} durationInFrames={durationInFrames} />;
     case 'image':
       return <FilmImageScene scene={scene} durationInFrames={durationInFrames} />;
+    case 'diagram':
+      return <DiagramScene scene={scene} durationInFrames={durationInFrames} />;
     case 'logo':
       return <LogoCard durationInFrames={durationInFrames} />;
   }

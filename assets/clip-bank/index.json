@@ -1,0 +1,32 @@
+[
+  {
+    "id": "s3_b9e4b8fb",
+    "scene_id": "s3",
+    "prompt": "Developer workstation viewed from behind, multiple code editor windows open showing neural network diagrams and Python code, warm desk lamp in a dark room, soft bokeh background, no human face visible, slow cinematic dolly forward toward the screen",
+    "prompt_hash": "b9e4b8fbfd4d32840c8a91805c6f0be4edb3e4363bd53d111d5803f38d028f4d",
+    "model": "wan2.1-t2v-14b-Q5_K_M",
+    "seed": 42,
+    "media_type": "video",
+    "width": 480,
+    "height": 848,
+    "num_frames": 49,
+    "fps": 16.0,
+    "uri": "file:///Users/dgnaro/projects/10-en-cours/tiktok_generator-video/output/gnaro/2026-10-09/post4/clips/s3_00001_.mp4",
+    "created_at": "2026-10-10"
+  },
+  {
+    "id": "s6_e5a98c54",
+    "scene_id": "s6",
+    "prompt": "Laptop screen glowing in a dim room showing a chat interface with AI assistant responses, soft warm gold highlights on the keyboard and screen frame, no human visible, slow gentle zoom into the screen, cinematic depth of field",
+    "prompt_hash": "e5a98c545589008fa1a4028af76c6bf9652cc38fd637ee44db425ccc345724f9",
+    "model": "wan2.1-t2v-14b-Q5_K_M",
+    "seed": 73,
+    "media_type": "video",
+    "width": 480,
+    "height": 848,
+    "num_frames": 49,
+    "fps": 16.0,
+    "uri": "file:///Users/dgnaro/projects/10-en-cours/tiktok_generator-video/output/gnaro/2026-10-09/post4/clips/s6_00001_.mp4",
+    "created_at": "2026-10-10"
+  }
+]

@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
 Collecte les stats vidéo depuis TikTok Creator Center via Playwright.
-Utilise le profil Chrome existant (session TikTok déjà connectée).
+Utilise un profil Chromium dédié (~/.tiktok-stats-profile) pour ne pas
+conflicтer avec Chrome déjà ouvert.
+
+Première utilisation : une fenêtre s'ouvre, connecte-toi à TikTok, puis appuie
+sur Entrée dans ce terminal. La session est persistée pour les runs suivants.
 
 Usage:
   python apps/tiktok-stats/collect.py          # skip si déjà fait aujourd'hui
@@ -22,7 +26,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = ROOT / "data" / "tiktok-stats"
-CHROME_PROFILE = Path.home() / "Library/Application Support/Google/Chrome"
+PLAYWRIGHT_PROFILE = Path.home() / ".tiktok-stats-profile"
 
 URLS = [
     "https://www.tiktok.com/creator-center/analytics?tab=content",
@@ -100,11 +104,14 @@ def collect() -> list[dict]:
             captured.extend(items)
             print(f"  ✓ {len(items)} vidéos ← {url[:90]}")
 
+    if not PLAYWRIGHT_PROFILE.exists():
+        print("[collect] Profil absent. Lance d'abord : python apps/tiktok-stats/login.py")
+        sys.exit(1)
+
     with sync_playwright() as p:
         ctx = p.chromium.launch_persistent_context(
-            user_data_dir=str(CHROME_PROFILE),
+            user_data_dir=str(PLAYWRIGHT_PROFILE),
             headless=False,
-            channel="chrome",
             args=["--no-first-run", "--no-default-browser-check"],
         )
         page = ctx.new_page()

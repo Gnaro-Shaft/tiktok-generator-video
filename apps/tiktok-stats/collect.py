@@ -29,13 +29,11 @@ OUTPUT_DIR = ROOT / "data" / "tiktok-stats"
 PLAYWRIGHT_PROFILE = Path.home() / ".tiktok-stats-profile"
 
 URLS = [
-    "https://www.tiktok.com/creator-center/analytics?tab=content",
-    "https://www.tiktok.com/tiktok-studio/content",
+    "https://www.tiktok.com/creator-center/content",
 ]
 
 API_KEYWORDS = (
-    "post_list", "aweme_list", "item_list",
-    "analytics/content", "video_list", "creator/analytics",
+    "creator/manage/item_list",
 )
 
 
@@ -54,34 +52,24 @@ def _parse_count(val) -> int:
 
 
 def _extract_from_body(body: dict) -> list[dict]:
-    items = (
-        body.get("aweme_list")
-        or body.get("video_list")
-        or body.get("item_list")
-        or body.get("data", {}).get("aweme_list")
-        or body.get("data", {}).get("video_list")
-        or body.get("data", {}).get("item_list")
-        or []
-    )
+    # creator/manage/item_list/v1 structure: top-level item_list
+    items = body.get("item_list") or []
     results = []
     for item in items:
-        stats = item.get("statistics") or item.get("stats") or {}
-        video_id = str(
-            item.get("aweme_id") or item.get("item_id") or item.get("id") or ""
-        )
+        video_id = str(item.get("item_id") or "")
         if not video_id:
             continue
-        dur = item.get("duration") or item.get("video", {}).get("duration") or 0
+        dur = item.get("duration") or 0
         duration_sec = dur // 1000 if dur > 1000 else dur
         results.append({
             "video_id": video_id,
-            "desc": (item.get("desc") or item.get("title") or "")[:120],
-            "published_ts": item.get("create_time") or item.get("createTime") or 0,
+            "desc": (item.get("desc") or "")[:120],
+            "published_ts": int(item.get("create_time") or item.get("post_time") or 0),
             "duration_sec": int(duration_sec),
-            "views":    _parse_count(stats.get("play_count")    or stats.get("view_count")  or 0),
-            "likes":    _parse_count(stats.get("digg_count")    or stats.get("like_count")  or 0),
-            "comments": _parse_count(stats.get("comment_count") or 0),
-            "shares":   _parse_count(stats.get("share_count")   or 0),
+            "views":    _parse_count(item.get("play_count")    or 0),
+            "likes":    _parse_count(item.get("like_count")    or 0),
+            "comments": _parse_count(item.get("comment_count") or 0),
+            "shares":   _parse_count(item.get("share_count")   or 0),
         })
     return results
 
@@ -121,10 +109,10 @@ def collect() -> list[dict]:
             print(f"[collect] → {url}")
             try:
                 page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-                time.sleep(5)
-                for _ in range(3):
+                time.sleep(8)
+                for _ in range(6):
                     page.keyboard.press("End")
-                    time.sleep(1.5)
+                    time.sleep(2)
                 if captured:
                     break
             except Exception as e:

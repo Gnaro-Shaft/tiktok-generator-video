@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
 Collecte les stats vidéo depuis TikTok Creator Center via Playwright.
-Utilise un profil Chromium dédié (~/.tiktok-stats-profile) pour ne pas
-conflicтer avec Chrome déjà ouvert.
-
-Première utilisation : une fenêtre s'ouvre, connecte-toi à TikTok, puis appuie
-sur Entrée dans ce terminal. La session est persistée pour les runs suivants.
+Utilise un profil Chromium dédié (~/.tiktok-stats-profile).
 
 Usage:
-  python apps/tiktok-stats/collect.py          # skip si déjà fait aujourd'hui
-  python apps/tiktok-stats/collect.py --force  # force la collecte
+  python apps/tiktok-stats/collect.py             # skip si déjà fait aujourd'hui
+  python apps/tiktok-stats/collect.py --force     # force la collecte
+  python apps/tiktok-stats/collect.py --headless  # sans fenêtre (scheduler)
 
 Output: data/tiktok-stats/YYYY-MM-DD.json
 """
@@ -74,7 +71,7 @@ def _extract_from_body(body: dict) -> list[dict]:
     return results
 
 
-def collect() -> list[dict]:
+def collect(headless: bool = False) -> list[dict]:
     captured: list[dict] = []
 
     def on_response(response):
@@ -99,7 +96,7 @@ def collect() -> list[dict]:
     with sync_playwright() as p:
         ctx = p.chromium.launch_persistent_context(
             user_data_dir=str(PLAYWRIGHT_PROFILE),
-            headless=False,
+            headless=headless,
             args=["--no-first-run", "--no-default-browser-check"],
         )
         page = ctx.new_page()
@@ -130,7 +127,8 @@ def collect() -> list[dict]:
 
 
 def main():
-    force = "--force" in sys.argv
+    force    = "--force"    in sys.argv
+    headless = "--headless" in sys.argv
     today = date.today().isoformat()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUTPUT_DIR / f"{today}.json"
@@ -139,8 +137,8 @@ def main():
         print(f"[collect] Déjà collecté aujourd'hui ({today}). --force pour relancer.")
         sys.exit(0)
 
-    print(f"[collect] Collecte du {today}…")
-    videos = collect()
+    print(f"[collect] Collecte du {today} (headless={headless})…")
+    videos = collect(headless=headless)
 
     if not videos:
         print("[collect] ⚠  Aucune donnée interceptée.")

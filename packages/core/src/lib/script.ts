@@ -54,25 +54,49 @@ export async function generateScript(opts: GenerateOptions): Promise<GeneratedSc
     ? buildSlidesPrompt(niche, topicHint, avoid, forceLonger)
     : buildNarrationPrompt(niche, topicHint, avoid, forceLonger, forceShorter);
 
-  const resp = await client.messages.create({
-    model: 'claude-sonnet-4-5',
-    max_tokens: 2500,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
-  });
+  // Jusqu'à 3 tentatives. Le modèle renvoie parfois un JSON valide mais dégradé
+  // (keywords/caption/hashtags vides) → vidéo sans B-roll et .txt non postable.
+  // On régénère plutôt que de livrer silencieusement un slot cassé.
+  const MAX_ATTEMPTS = 3;
+  let lastErr = '';
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const resp = await client.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 2500,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    });
 
-  const text = resp.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as { text: string }).text)
-    .join('');
+    const text = resp.content
+      .filter((b) => b.type === 'text')
+      .map((b) => (b as { text: string }).text)
+      .join('');
 
-  const jsonStart = text.indexOf('{');
-  const jsonEnd = text.lastIndexOf('}');
-  if (jsonStart < 0 || jsonEnd < 0) {
-    throw new Error(`No JSON in script response: ${text.slice(0, 200)}`);
+    const jsonStart = text.indexOf('{');
+    const jsonEnd = text.lastIndexOf('}');
+    if (jsonStart < 0 || jsonEnd < 0) {
+      lastErr = `aucun JSON dans la réponse (${text.slice(0, 120)})`;
+    } else {
+      try {
+        const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+        const built = buildGenerated(parsed, niche);
+        const issue = degradedReason(built);
+        if (!issue) return built;
+        lastErr = issue;
+      } catch (err) {
+        lastErr = `JSON invalide (${err instanceof Error ? err.message : String(err)})`;
+      }
+    }
+
+    if (attempt < MAX_ATTEMPTS) {
+      console.log(`  ⚠ Script dégradé (${lastErr}) — regénération ${attempt + 1}/${MAX_ATTEMPTS}`);
+    }
   }
-  const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+  throw new Error(`Génération script échouée après ${MAX_ATTEMPTS} tentatives : ${lastErr}`);
+}
 
+/** Transforme le JSON brut du modèle en GeneratedScript (sans validation). */
+function buildGenerated(parsed: any, niche: NicheConfig): GeneratedScript {
   if (niche.mode === 'slides') {
     return {
       mode: 'slides',
@@ -85,29 +109,32 @@ export async function generateScript(opts: GenerateOptions): Promise<GeneratedSc
       keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
     };
   }
-
-  // Narration mode: validate the structure Claude returned to avoid
-  // `Cannot read properties of undefined` at downstream steps.
-  if (!parsed.script || typeof parsed.script !== 'object') {
-    throw new Error(`Script JSON sans champ "script": ${text.slice(0, 200)}`);
-  }
-  const hook = parsed.script.hook ?? '';
-  const body = parsed.script.body ?? '';
-  const cta = parsed.script.cta ?? '';
-  if (!hook || !body) {
-    throw new Error(`Script incomplet (hook="${hook.slice(0, 30)}…", body=${body.length} chars)`);
-  }
-
-  const full_text = `${hook}. ${body} ${cta}`.trim();
+  const hook = parsed.script?.hook ?? '';
+  const body = parsed.script?.body ?? '';
+  const cta = parsed.script?.cta ?? '';
   return {
     mode: 'narration',
     topic: parsed.topic ?? 'sujet inconnu',
     script: { hook, body, cta },
-    full_text,
+    full_text: `${hook}. ${body} ${cta}`.trim(),
     caption: parsed.caption ?? '',
     hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
     keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
   };
+}
+
+/** Renvoie une raison lisible si le script est inexploitable en l'état, sinon ''. */
+function degradedReason(g: GeneratedScript): string {
+  if (g.mode === 'narration') {
+    if (!g.script?.hook) return 'hook manquant';
+    if (!g.script?.body) return 'body manquant';
+  } else if (!g.scenes || g.scenes.length === 0) {
+    return 'scenes manquantes';
+  }
+  if (g.keywords.length === 0) return 'keywords vides (→ vidéo sans clips)';
+  if (!g.caption) return 'caption vide';
+  if (g.hashtags.length === 0) return 'hashtags vides';
+  return '';
 }
 
 const KEYWORDS_SAFE_RULE = `Les keywords servent à trouver du stock vidéo TikTok-safe (compte qui peut être vu par tous). PROSCRIS tout ce qui peut renvoyer du contenu suggestif, sexualisé, body-shaming ou ambigü : pas de "lingerie/underwear/bra/bikini/swimsuit", pas de "bedroom/shower/bath/massage/spa", pas de "sexy/seductive", pas de "cleavage/thigh", pas de "kissing/intimate/dance club/pole dance/twerk". Préfère des plans abstraits, professionnels, neutres : workspace, laptop, calendar, city skyline, ai dashboard, growth chart, etc.`;

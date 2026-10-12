@@ -39,7 +39,7 @@ stock:
   orientation: portrait
 
 music:
-  enabled: true
+  enabled: false        # désactivé 2026-05-22 : strike TikTok sur AION (fingerprint Pixabay matché)
   mood: calm
   volume_db: -20
 

@@ -14,6 +14,7 @@ export interface GnaroScene {
   emphasis?: string;
   clip_path?: string;
   image_path?: string;
+  audio_path?: string;
   stage?: string;
   duration_sec: number;
 }
@@ -44,6 +45,9 @@ export const GnaroVideo: React.FC<GnaroVideoProps> = ({ scenes, fps, audio_path,
           const durationInFrames = Math.round(scene.duration_sec * fps);
           return (
             <Series.Sequence key={scene.id} durationInFrames={durationInFrames}>
+              {scene.audio_path && (
+                <Audio src={resolveClipSrc(scene.audio_path)} />
+              )}
               <GnaroSceneRenderer scene={scene} durationInFrames={durationInFrames} />
             </Series.Sequence>
           );

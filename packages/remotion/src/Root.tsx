@@ -2,11 +2,15 @@ import { Composition } from 'remotion';
 import { TikTokVideo, TikTokVideoProps, defaultProps } from './TikTokVideo';
 import { SlidesVideo, SlidesVideoProps, slidesDefaultProps } from './SlidesVideo';
 import { GnaroVideo, GnaroVideoProps, gnaroDefaultProps } from './GnaroVideo';
+import { GnaroVideoV2, GnaroVideoV2Props, gnaroV2DefaultProps } from './GnaroVideoV2';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyComp = React.ComponentType<any>;
 
 const gnaroTotalFrames = (props: GnaroVideoProps) =>
+  props.scenes.reduce((acc, s) => acc + Math.round(s.duration_sec * props.fps), 0) || 1;
+
+const gnaroV2TotalFrames = (props: GnaroVideoV2Props) =>
   props.scenes.reduce((acc, s) => acc + Math.round(s.duration_sec * props.fps), 0) || 1;
 
 export const Root: React.FC = () => {
@@ -62,6 +66,19 @@ export const Root: React.FC = () => {
         calculateMetadata={({ props }) => {
           const p = props as unknown as GnaroVideoProps;
           return { durationInFrames: gnaroTotalFrames(p), fps: p.fps };
+        }}
+      />
+      <Composition
+        id="GnaroVideoV2"
+        component={GnaroVideoV2 as AnyComp}
+        durationInFrames={gnaroV2TotalFrames(gnaroV2DefaultProps)}
+        fps={gnaroV2DefaultProps.fps}
+        width={1080}
+        height={1920}
+        defaultProps={gnaroV2DefaultProps as unknown as Record<string, unknown>}
+        calculateMetadata={({ props }) => {
+          const p = props as unknown as GnaroVideoV2Props;
+          return { durationInFrames: gnaroV2TotalFrames(p), fps: p.fps };
         }}
       />
     </>
